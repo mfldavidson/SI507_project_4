@@ -47,9 +47,33 @@ for state in states:
     parks_tags = parks_table.find_all('li',class_='clearfix')
     for tag in parks_tags:
         # check if the park already exists in the db
-        park_exists = session.query(Park.Name).filter(Park.Name.like(tag.h3.text)).all()
-        # if the park doesn't already exist, add it to the db
-        if not park_exists:
-            new_park = Park(Name=tag.h3.text,Type=tag.h2.text,Descr=tag.p.text.strip('\n'),Location=tag.h4.text,State=id)
+        park_exists = session.query(Park).filter(Park.Name == tag.h3.text).all()
+        # if park exists, create a new relationship; if the park doesn't already exist, add it to the db
+        if park_exists:
+            rel_exists = session.query(StateParkAssociation).filter(StateParkAssociation.Park_Id == park_exists[0].Id, StateParkAssociation.State_Id == id).all()
+            if rel_exists:
+                break
+            else:
+                new_rel = StateParkAssociation(State_Id=id,Park_Id=park_exists[0].Id)
+                session.add(new_rel)
+                session.commit()
+        else:
+            new_park = Park(Name=tag.h3.text,Type=tag.h2.text,Descr=tag.p.text.strip('\n'),Location=tag.h4.text)
             session.add(new_park)
+            session.commit()
+            new_rel = StateParkAssociation(State_Id=id,Park_Id=new_park.Id)
+            session.add(new_rel)
     session.commit()
+
+# write the data to a csv
+with open('nps_parks.csv','w') as parks_file:
+    parkwriter = csv.writer(parks_file)
+    parkwriter.writerow(['Park Name','Park Type','Park Location Description','Park Description','Park States'])
+    parks = session.query(Park).all()
+    for park in parks:
+        states = []
+        rels = session.query(StateParkAssociation).filter(StateParkAssociation.Park_Id == park.Id).all()
+        for rel in rels:
+            new_state = session.query(State).filter(State.Id == rel.State_Id).first()
+            states.append(new_state.Abbr)
+        parkwriter.writerow([park.Name,park.Type,park.Location,park.Descr,', '.join(states)])
